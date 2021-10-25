@@ -19,7 +19,7 @@ The project **will be completed** in the following steps
 1. Breadboard
 1. Coding
 
---
+===========
 
 ## Summary
 
