@@ -8,15 +8,38 @@
  
 #include <SPI.h>
 #include <Ethernet.h>
+#include <WemoObj.h>
 #include <mac.h>
 #include <hue.h>
 #include <Encoder.h>
 #include <OneButton.h>
 #include <Wire.h>
+#include <IoTTimer.h>
 #include <Adafruit_MPU6050.h>
 
+#include <Adafruit_SSD1306.h>
+#include <Adafruit_BME280.h>
 
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+#define OLED_RESET     4 // Reset pin # 4 (or -1 if sharing Arduino reset pin)
+#define SCREEN_ADDRESS 0x3C ///<= See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+// Define BME280 object temperature, humidity, pressure
+Adafruit_BME280 bme; //this is for I2C device
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
+
+
+EthernetClient client;
+bool status;   //user to ensure port openned correctly
+
+WemoObj wemoObj;
+
+bool isWemoOFF[2]  = {true, true};
+bool checkTimer[2] = {false, false};
+IoTTimer wemoTimer[2]; // 2 wemo objects to control
+
+char message[40];
 
 // The "c" pin on the encoder is connected to GND
 const int encoderRed = 3;   // OUTPUT from the Teensy
@@ -55,11 +78,23 @@ enum Direction {    // Joystick movements
 };
 
 int encoderPosition;
-int brightness;
+int brightness = 200; // Starting brightness
 
 void setup()
 {
 
+  //                      OLED  DISPLAY
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }  
+  display.display(); // Display initial logo
+  delay(500);       // Pause for 500 milliseconds
+  
+  display.cp437(true);         // Use full 256 char 'Code Page 437' font
+
+  test_display();
 
   // JoyStick
   
@@ -125,6 +160,7 @@ void setup()
 }
 
 void loop() {
+    myButton.tick();
 
   //                  JoyStick Section
   readJoyStick();
@@ -147,17 +183,6 @@ void loop() {
   
 //  readMPU6050();
 
-  
- 
-  myButton.tick();
-  // setHue function needs 5 parameters
-  // int bulb - this is the bulb number
-  //  bool activated - true for bulb on, false for off
-  // int color - Hue color from hue.h
-  //  int - brightness - from 0 to 255 
-  //  int - saturation - from 0 to 255
-  //
-
   encoderPosition = myEnc.read();
   if (encoderPosition<10) { 
     encoderPosition=10;
@@ -169,10 +194,75 @@ void loop() {
        myEnc.write(255);    
     }
   }
-     brightness = encoderPosition;
+  
+  brightness = encoderPosition;
+
+  //                  Wemo objects
+  //checkWemoTimer(0);
+  //checkWemoTimer(1);   
 
 }
 
+//void checkWemoTimer(int wemo) {
+//  if (!isWemoOFF[wemo] && wemoTimer[wemo].isTimerReady() && checkTimer[wemo]) { // if it's on
+//    wemoObj.switchOFF(wemo);
+//    isWemoOFF[wemo] = true;
+//    checkTimer[wemo] = false;
+//  }
+//}
+
+  void turn_OFF_or_ON_Wemo(int wemo) {
+    Serial.printf("Before isWemoOFF[%i] = %d\n",wemo, isWemoOFF[wemo]);
+    isWemoOFF[wemo]=!isWemoOFF[wemo];
+    Serial.printf("After isWemoOFF[%i] = %d\n",wemo, isWemoOFF[wemo]);
+
+    if ( !isWemoOFF[wemo]) { // if it's on and clicked for OFF
+      wemoObj.switchOFF(wemo);
+    }
+    else { // turn on the wemo switch if switch was off
+      wemoObj.switchON(wemo);
+    }
+  }
+
+
+void  test_display() {
+  sprintf(message, "%s","Hello World\n");
+  myDrawText(message,0);
+
+  sprintf(message, "Se%cor %s \n%s", 0xA4,"Pedro Sanchez", "11/27" );
+  myDrawText(message,0);
+  
+  sprintf(message, "    SE%cOR\n\n %s", 165,"   JESUS\n\n mi  DIOS\n\n" );
+  myDrawText(message,0);
+//  sprintf(message, "    SE%cOR\n\n %s", 165,"   JESUS\n\n mi  DIOS\n\n" );
+//  myDrawText(message,3);
+//  sprintf(message, "    SE%cOR\n\n %s", 165,"   JESUS\n\n mi  DIOS\n\n" );
+//  myDrawText(message,1);  
+//  sprintf(message, "    SE%cOR\n\n %s", 165,"   JESUS\n\n mi  DIOS\n\n" );
+//  myDrawText(message,2);
+//  sprintf(message, "    SE%cOR\n\n %s", 165,"   JESUS\n\n mi  DIOS\n\n" );
+//  myDrawText(message,1);    
+}
+
+void myDrawText(char *text, int rotation) {
+  
+  int size;
+  size = sizeof(text)/sizeof(text[0]);
+  Serial.printf("size=%i string=%s\n",size, text);
+  
+  display.clearDisplay();
+
+  display.setTextSize(1);      // Normal 1:1 pixel scale
+  display.setTextColor(SSD1306_WHITE); // Draw white text
+  
+  display.setRotation(rotation);
+  display.setCursor(0, 0);     // Start at top-left corner
+  
+  display.printf("%s", text);
+
+  display.display();
+  delay(2000);
+}
 
 void doJoystickActions() {
   
@@ -182,11 +272,12 @@ void doJoystickActions() {
 
     break;
     case Up:
-  Serial.printf(" *************************   UP Direction: %d\n      ", directionXY);
-
-    break;
+  Serial.printf(" *************************   UP Direction: %d\n      ", directionXY);      
+      turn_OFF_or_ON_Wemo(0);
+   break;
     case Down:
   Serial.printf(" *************************   DOWN Direction: %d\n      ", directionXY);
+      turn_OFF_or_ON_Wemo(1);
 
     break;
     case Left:
@@ -423,7 +514,6 @@ void turn_OFF_or_ON() {
   if (!isOFF) { // if it's on and clicked for OFF
    // for (int i=0; i<totalColors; i++) {
       for (int j=1; j<=6; j++) {
-         brightness=200;
         // setHue(j, true, HueRainbow[i], brightness, 255);
          setHue(j, false, 0, 0, 0);
          //delay(100);
@@ -437,7 +527,6 @@ void turn_OFF_or_ON() {
   }
   else { // turn on rainbow
       for (int j=1; j<=6; j++) {
-         brightness=200;
          setHue(j, true, HueYellow, brightness, 255);
 
       }
