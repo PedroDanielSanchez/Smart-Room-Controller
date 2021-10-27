@@ -27,7 +27,17 @@ const int JOYSTICK = 7;
 const int JOYSTICK_RX = A2;
 const int JOYSTICK_RY = A3;
 
-int joystickValue = 0;
+bool joystickButtonState  = false;
+bool joystickClicked   = false;
+
+int  previousButtonState = joystickButtonState;
+int  previousX = 730;
+int  previousY = 750;
+bool p_xMoved = false;
+bool p_yMoved = false;
+int directionXY = 6; // Still
+int p_directionXY = directionXY;
+
 
 const int BUTTONPIN = 23;
 int  totalColors = sizeof(HueRainbow)/sizeof(HueRainbow[0]);
@@ -38,6 +48,11 @@ const int pullUP = true;
 
 Encoder myEnc(1,2);
 OneButton myButton(BUTTONPIN , activeLOW , pullUP);
+
+enum Direction {    // Joystick movements
+//  0      1    2   3      4       5          6         7          8
+  Still, Left, Up, Right, Down, Left_Down, Left_Up, Right_Down, Right_Up
+};
 
 int encoderPosition;
 int brightness;
@@ -52,6 +67,17 @@ void setup()
 
   Serial.begin(115200);
   while (!Serial);
+
+
+  // Ethernet
+  pinMode(10, OUTPUT);
+  digitalWrite(10, HIGH);
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
+  Ethernet.begin(mac);
+  delay(200);          //ensure Serial Monitor is up and running           
+  printIP();
+  Serial.printf("LinkStatus: %i  \n",Ethernet.linkStatus());
 
   // MPU6050
 
@@ -68,12 +94,7 @@ void setup()
 
   setupMPU6050();
 
-  /*
-  // Ethernet
-  pinMode(10, OUTPUT);
-  digitalWrite(10, HIGH);
-  pinMode(4, OUTPUT);
-  digitalWrite(4, HIGH);
+
 
   // Encoder
   pinMode(encoderRed, OUTPUT);      // OUTPUT from the Teensy
@@ -92,35 +113,42 @@ void setup()
   Serial.printf("Started Hue V1 with %i colors in the HueRainbow  \n", totalColors);
 
 
-  Ethernet.begin(mac);
-  delay(200);          //ensure Serial Monitor is up and running           
-  printIP();
-  Serial.printf("LinkStatus: %i  \n",Ethernet.linkStatus());
- */ 
+//  Ethernet.begin(mac);
+//  delay(200);          //ensure Serial Monitor is up and running           
+//  printIP();
+//  Serial.printf("LinkStatus: %i  \n",Ethernet.linkStatus());
+ 
+
+ Serial.printf("\n\n\nButton state: %d\n\n", joystickButtonState);
+   Serial.printf(" *************************   Direction: %d\n\n\n      ", directionXY);
+
 }
 
 void loop() {
 
-  // JoyStick
+  //                  JoyStick Section
+  readJoyStick();
+  if (previousButtonState != joystickButtonState) { // joystick Button was clicked
+     if (joystickButtonState) {
+       HuesON(true);
+    } else {
+       HuesON(false);
+    }   
+    previousButtonState = joystickButtonState;
+  }
 
+  if (directionXY != p_directionXY) {
+    doJoystickActions(); 
+    p_directionXY = directionXY; 
+  }
 
-//  joystickValue = analogRead(JOYSTICK_RX);       // read X axis value [0..1023]
-//  Serial.printf("X: %04i", joystickValue);
-//
-//  joystickValue = analogRead(JOYSTICK_RY);       // read Y axis value [0..1023]
-//  Serial.printf(" | Y: %04i", joystickValue);
-//
-//  joystickValue = digitalRead(JOYSTICK);        // read Button state [0,1]
-//  Serial.printf(" | Button: %i\n", joystickValue);
-//
-//  delay(100);
 
   // MPU6050
   
-  readMPU6050();
+//  readMPU6050();
 
   
- /* 
+ 
   myButton.tick();
   // setHue function needs 5 parameters
   // int bulb - this is the bulb number
@@ -142,11 +170,164 @@ void loop() {
     }
   }
      brightness = encoderPosition;
-*/
+
+}
+
+
+void doJoystickActions() {
+  
+  
+  switch (directionXY) {
+    case Still:
+
+    break;
+    case Up:
+  Serial.printf(" *************************   UP Direction: %d\n      ", directionXY);
+
+    break;
+    case Down:
+  Serial.printf(" *************************   DOWN Direction: %d\n      ", directionXY);
+
+    break;
+    case Left:
+  Serial.printf(" *************************   LEFT Direction: %d\n      ", directionXY);
+
+    break;
+    case Right:
+  Serial.printf(" *************************   RIGHT Direction: %d\n      ", directionXY);
+
+    break;
+    case Left_Up:
+  Serial.printf(" *************************   LEFT UP Direction: %d\n      ", directionXY);
+
+    break;
+    case Left_Down:
+  Serial.printf(" *************************   LEFT DOWN Direction: %d\n      ", directionXY);
+
+    break;
+    case Right_Up:
+  Serial.printf(" *************************   RIGHT UP Direction: %d\n      ", directionXY);
+
+    break;
+    case Right_Down:
+  Serial.printf(" *************************   RIGHT DOWN Direction: %d\n      ", directionXY);
+
+    break;
+  }
+}
+
+void HuesON(bool state) {
+  Serial.printf(" >>>>>>>>>>>>>>>>>>>>>>>>>    Button state: %d\n      ", joystickButtonState);
+  if (state) { // Turn ON all Hues
+    
+  }
+  else {       // Turn OFF all Hues
+    
+  }
+}
+
+// bool p_xMoved = false;
+// bool p_yMoved = false;
+
+void readJoyStick() {
+
+  int x, y, buttonValue;
+  bool xMoved = false;
+  bool yMoved = false;
+  
+  
+  x = analogRead(JOYSTICK_RX);       // read X axis value [0..1023]
+ // Serial.printf("X: %04i", x);
+
+  y = analogRead(JOYSTICK_RY);       // read Y axis value [0..1023]
+//  Serial.printf(" | Y: %04i", y);
+
+//int  previousX = 730;
+//int  previousY = 750;
+
+  if (abs(x-previousX)>25) { // x moved
+    xMoved = true;
+    // p_xMoved = xMoved;
+
+  }
+
+  if (abs(y-previousX)>25) { // y moved
+    yMoved = true;
+    //  p_yMoved = yMoved;
+    
+  }  
+
+  //               Assign movement direction
+  if (xMoved) {
+    if (yMoved) {
+       // both moved
+       if (x>900) { // right side
+          if (y>900) {
+            directionXY = Right_Down;
+          }
+          else {
+            if (y<500) {
+              directionXY = Right_Up;
+            }
+          }
+       }
+       else {
+        if (x<100) {
+          if (y<100) {
+            directionXY = Left_Up;
+          } 
+          else {
+            if (y>900) {
+              directionXY = Left_Down;
+            }
+          }
+        }
+       }
+  
+    } 
+    else {
+      // only x movement
+      if (x<100) directionXY = Left;
+      if (x>950) directionXY = Right;
+    }
+  } 
+  else { 
+    if (yMoved) {
+      // only y movement
+      if (y<100) directionXY = Up;
+      if (y>900) directionXY = Down;
+    }
+    else { // No movement
+      directionXY = Still;
+    }
+   
+  }
+
+  
+  
+
+  buttonValue = digitalRead(JOYSTICK);        // read Button state [0,1]
+//  Serial.printf(" | Button: %i\n", buttonValue);
+  if (!joystickClicked) {
+    if (buttonValue == 0) { // button was clicked
+      joystickClicked = true;
+    }
+  }
+  else {
+    if (buttonValue == 1)  {
+      joystickButtonState = !joystickButtonState;
+      joystickClicked = false;
+    }
+  }
+
+  delay(100);
+
 }
 
 void setupMPU6050() {
 
+  // acceleration 1g(A single G-force 1g is equivalent to gravitational acceleration 9.8 m/s2)
+  
   mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
   Serial.printf("Accelerometer range set to: ");
   switch (mpu.getAccelerometerRange()) {
@@ -250,4 +431,28 @@ void turn_OFF_or_ON() {
     setHue(LIGHT, false, 0, 0, 0);
   }
 //  Serial.printf("Pressed the buttom after: %d \n", isOFF);
+}
+
+void leftAction() {
+  
+}
+
+void rightAction() {
+  
+}
+
+void upAction() {
+  
+}
+
+void downAction() {
+  
+}
+
+void flat() {
+  
+}
+
+void tilted() {
+  
 }
