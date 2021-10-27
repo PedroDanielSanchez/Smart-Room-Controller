@@ -421,14 +421,27 @@ void turn_OFF_or_ON() {
   isOFF = !isOFF;
 //  Serial.printf("brightness %i\n", brightness);
   if (!isOFF) { // if it's on and clicked for OFF
-    for (int i=0; i<totalColors; i++) {
-       setHue(LIGHT, true, HueRainbow[i], brightness, 255);
-       delay(1000);
-    }
+   // for (int i=0; i<totalColors; i++) {
+      for (int j=1; j<=6; j++) {
+         brightness=200;
+        // setHue(j, true, HueRainbow[i], brightness, 255);
+         setHue(j, false, 0, 0, 0);
+         //delay(100);
+         //setHue(j, true, HueYellow, brightness, 255);
+
+      }
+       //setHue(LIGHT, true, HueRainbow[i], brightness, 255);
+
+       // delay(1000);
+    //}
   }
   else { // turn on rainbow
-    delay(1000);
-    setHue(LIGHT, false, 0, 0, 0);
+      for (int j=1; j<=6; j++) {
+         brightness=200;
+         setHue(j, true, HueYellow, brightness, 255);
+
+      }
+
   }
 //  Serial.printf("Pressed the buttom after: %d \n", isOFF);
 }
