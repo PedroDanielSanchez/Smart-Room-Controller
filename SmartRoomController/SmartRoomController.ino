@@ -29,6 +29,10 @@ Adafruit_BME280 bme; //this is for I2C device
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 Adafruit_MPU6050 mpu;
 
+enum Direction {    // Joystick movements
+  Still, Left, Up, Right, Down, Left_Down, Left_Up, Right_Down, Right_Up
+};
+
 
 EthernetClient client;
 bool status;   //user to ensure port openned correctly
@@ -72,13 +76,10 @@ const int pullUP = true;
 Encoder myEnc(1,2);
 OneButton myButton(BUTTONPIN , activeLOW , pullUP);
 
-enum Direction {    // Joystick movements
-//  0      1    2   3      4       5          6         7          8
-  Still, Left, Up, Right, Down, Left_Down, Left_Up, Right_Down, Right_Up
-};
 
-int encoderPosition;
+int encoderPosition = 150;
 int brightness = 200; // Starting brightness
+int p_encoderPosition = brightness;
 
 void setup()
 {
@@ -103,6 +104,8 @@ void setup()
   Serial.begin(115200);
   while (!Serial);
 
+  Serial.printf("\n\n\n\n\n\nStarted SMART ROOM CONTROLLER V1 by Pedro Daniel Sanchez  \n", totalColors);
+
 
   // Ethernet
   pinMode(10, OUTPUT);
@@ -112,11 +115,11 @@ void setup()
   Ethernet.begin(mac);
   delay(200);          //ensure Serial Monitor is up and running           
   printIP();
-  Serial.printf("LinkStatus: %i  \n",Ethernet.linkStatus());
+  // Serial.printf("LinkStatus: %i  \n",Ethernet.linkStatus());
 
   // MPU6050
 
-  Serial.printf("Adafruit MPU6050 test!\n");
+  // Serial.printf("Adafruit MPU6050 test!\n");
 
   // Try to initialize!
   if (!mpu.begin()) {
@@ -125,7 +128,8 @@ void setup()
       delay(10);
     }
   }
-  Serial.printf("MPU6050 Found!\n");  
+  
+  // Serial.printf("MPU6050 Found!\n");  
 
   setupMPU6050();
 
@@ -137,30 +141,22 @@ void setup()
   pinMode(encoderSW, INPUT_PULLUP); // SW means the  switch  Note: it is an INPUT to the Teensy
 
   digitalWrite(encoderRed, HIGH);
-  encoderPosition = myEnc.read();   // First Time the encoder is read 
-//  previousPosition = encoderPosition;
-  Serial.printf("Initial Econder position =  %d\n\n", encoderPosition);
+  myEnc.write(encoderPosition);   // First Time set to default initialization value
+  p_encoderPosition = encoderPosition;
+  // Serial.printf("Initial Econder position =  %d\n\n", encoderPosition);
 
   // Button
-  myButton.attachClick(turn_OFF_or_ON);
+  turn_LIGHTS_OFF();
+  myButton.attachClick(turn_LIGHTS_OFF_or_ON);
+  myButton.attachDoubleClick(turn_LIGHTS_OFF);
   myButton.setClickTicks(250); 
 
-  Serial.printf("Started Hue V1 with %i colors in the HueRainbow  \n", totalColors);
-
-
-//  Ethernet.begin(mac);
-//  delay(200);          //ensure Serial Monitor is up and running           
-//  printIP();
-//  Serial.printf("LinkStatus: %i  \n",Ethernet.linkStatus());
- 
-
- Serial.printf("\n\n\nButton state: %d\n\n", joystickButtonState);
-   Serial.printf(" *************************   Direction: %d\n\n\n      ", directionXY);
+  Serial.printf(" #########  End of Setup\n\n\n      ");
 
 }
 
 void loop() {
-    myButton.tick();
+  myButton.tick();
 
   //                  JoyStick Section
   readJoyStick();
@@ -184,32 +180,37 @@ void loop() {
 //  readMPU6050();
 
   encoderPosition = myEnc.read();
-  if (encoderPosition<10) { 
-    encoderPosition=10;
-    myEnc.write(10);    
+  // Serial.printf("ecoderPosition = %d\n", encoderPosition);
+  // delay(1000);
+  
+  if (isOFF) { // if Hues are off don't move the brightness
+    myEnc.write(p_encoderPosition);
+    encoderPosition = p_encoderPosition;
+  }
+  
+  if (encoderPosition<40) { 
+    encoderPosition=40;
+    p_encoderPosition = encoderPosition;
+    myEnc.write(encoderPosition);    
   }
   else {
     if (encoderPosition>255) {
        encoderPosition=255;
-       myEnc.write(255);    
+       p_encoderPosition = encoderPosition;
+       myEnc.write(encoderPosition);    
     }
   }
-  
-  brightness = encoderPosition;
 
-  //                  Wemo objects
-  //checkWemoTimer(0);
-  //checkWemoTimer(1);   
-
+  if (abs(p_encoderPosition - encoderPosition) > 20 ) { // only is pos changed 
+    brightness = encoderPosition;
+    p_encoderPosition = encoderPosition;
+      for (int j=1; j<=6; j++) {
+        setHue(j, true, HueYellow, brightness, 255);         
+      }
+    
+  }
 }
 
-//void checkWemoTimer(int wemo) {
-//  if (!isWemoOFF[wemo] && wemoTimer[wemo].isTimerReady() && checkTimer[wemo]) { // if it's on
-//    wemoObj.switchOFF(wemo);
-//    isWemoOFF[wemo] = true;
-//    checkTimer[wemo] = false;
-//  }
-//}
 
   void turn_OFF_or_ON_Wemo(int wemo) {
     Serial.printf("Before isWemoOFF[%i] = %d\n",wemo, isWemoOFF[wemo]);
@@ -248,7 +249,7 @@ void myDrawText(char *text, int rotation) {
   
   int size;
   size = sizeof(text)/sizeof(text[0]);
-  Serial.printf("size=%i string=%s\n",size, text);
+  // Serial.printf("size=%i string=%s\n",size, text);
   
   display.clearDisplay();
 
@@ -495,7 +496,7 @@ void readMPU6050() {
 
   Serial.printf("Temperature: %.2f degC\n\n", temp.temperature);
 
-  delay(500);  
+  delay(100);  // Antes 500
 }
 
 
@@ -507,49 +508,37 @@ void printIP() {
   Serial.printf("%i\n",Ethernet.localIP()[3]);
 }
 
-void turn_OFF_or_ON() {
-//  Serial.printf("Pressed the buttom before: %d \n", isOFF);
+void turn_LIGHTS_OFF_or_ON() {
+  Serial.printf("*******    Pressed the buttom before: %d \n", isOFF);
   isOFF = !isOFF;
-//  Serial.printf("brightness %i\n", brightness);
-  if (!isOFF) { // if it's on and clicked for OFF
-   // for (int i=0; i<totalColors; i++) {
+  Serial.printf("*******    Pressed: %d  After brightness %i\n", isOFF, brightness);
+  if (!isOFF) { // turn lights ON
       for (int j=1; j<=6; j++) {
-        // setHue(j, true, HueRainbow[i], brightness, 255);
-         setHue(j, false, 0, 0, 0);
-         //delay(100);
-         //setHue(j, true, HueYellow, brightness, 255);
-
+        setHue(j, true, HueYellow, brightness, 255);         
       }
-       //setHue(LIGHT, true, HueRainbow[i], brightness, 255);
-
-       // delay(1000);
-    //}
   }
-  else { // turn on rainbow
+  else { // turn lights off
       for (int j=1; j<=6; j++) {
-         setHue(j, true, HueYellow, brightness, 255);
-
+        setHue(j, false, 0, 0, 0);
       }
 
   }
 //  Serial.printf("Pressed the buttom after: %d \n", isOFF);
 }
 
-void leftAction() {
-  
+void turn_LIGHTS_OFF() {
+
+  Serial.printf("======== 1   turn_lights_OFF: isOFF = %d  brightness %i\n", isOFF, brightness);
+
+  for (int j=1; j<=6; j++) {
+     setHue(j, false, 0, 0, 0);
+  }
+  isOFF=true;
+  Serial.printf("======== 2   turn_lights_OFF: isOFF = %d  brightness %i\n", isOFF, brightness);
+
+
 }
 
-void rightAction() {
-  
-}
-
-void upAction() {
-  
-}
-
-void downAction() {
-  
-}
 
 void flat() {
   
