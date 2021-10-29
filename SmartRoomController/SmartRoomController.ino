@@ -1,5 +1,5 @@
 /*
- *  Project:      HueHeader
+ *  Project:      Smart Room Controller
  *  Description:  Hue light is turn on, displays colors of HueRainbow array const values.
  *                                                        and encoder changes brightness
  *  Authors:      Pedro Sanchez
@@ -15,7 +15,6 @@
 #include <OneButton.h>
 #include <Wire.h>
 #include <IoTTimer.h>
-#include <Adafruit_MPU6050.h>
 
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_BME280.h>
@@ -27,29 +26,34 @@
 // Define BME280 object temperature, humidity, pressure
 Adafruit_BME280 bme; //this is for I2C device
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-Adafruit_MPU6050 mpu;
 
 enum Direction {    // Joystick movements
   Still, Left, Up, Right, Down, Left_Down, Left_Up, Right_Down, Right_Up
 };
 
 
+// Ethernet
 EthernetClient client;
 bool status;   //user to ensure port openned correctly
 
-WemoObj wemoObj;
 
+// WEMO
+WemoObj wemoObj;
 bool isWemoOFF[2]  = {true, true};
 bool checkTimer[2] = {false, false};
 IoTTimer wemoTimer[2]; // 2 wemo objects to control
 
 char message[40];
 
-// The "c" pin on the encoder is connected to GND
+// ENCODER :    The "c" pin on the encoder is connected to GND
 const int encoderRed = 3;   // OUTPUT from the Teensy
 const int encoderGreen = 4;  // OUTPUT from the Teensy
 const int encoderSW = 5; // SW means the  switch  Note: it is an INPUT to the Teensy
 
+// BUZZER
+const int BUZZER = 21; // A7
+
+// JOYSTICK
 const int JOYSTICK = 7;
 const int JOYSTICK_RX = A2;
 const int JOYSTICK_RY = A3;
@@ -65,21 +69,31 @@ bool p_yMoved = false;
 int directionXY = 6; // Still
 int p_directionXY = directionXY;
 
-
+// Button
 const int BUTTONPIN = 23;
+
+// ???
 int  totalColors = sizeof(HueRainbow)/sizeof(HueRainbow[0]);
 bool isOFF = true;
 const int LIGHT = 2;
 const int activeLOW = true;
 const int pullUP = true;
 
+// Encoder
 Encoder myEnc(1,2);
 OneButton myButton(BUTTONPIN , activeLOW , pullUP);
-
-
 int encoderPosition = 150;
 int brightness = 200; // Starting brightness
 int p_encoderPosition = brightness;
+
+
+// MPU6050
+const int MPU_addr=0x68;
+int16_t AcX,AcY,AcZ,Tmp,GyX,GyY,GyZ;
+int minVal=265;
+int maxVal=402;
+double x, y, z;
+double p_y=0.0;
 
 void setup()
 {
@@ -96,6 +110,13 @@ void setup()
   display.cp437(true);         // Use full 256 char 'Code Page 437' font
 
   test_display();
+
+  // Buzzer
+  pinMode(BUZZER, OUTPUT);
+  digitalWrite(BUZZER, LOW);
+  digitalWrite(BUZZER, HIGH);
+  delay(10);
+  digitalWrite(BUZZER, LOW);
 
   // JoyStick
   
@@ -119,19 +140,12 @@ void setup()
 
   // MPU6050
 
-  // Serial.printf("Adafruit MPU6050 test!\n");
 
-  // Try to initialize!
-  if (!mpu.begin()) {
-    Serial.printf("Failed to find MPU6050 chip\n");
-    while (1) {
-      delay(10);
-    }
-  }
-  
-  // Serial.printf("MPU6050 Found!\n");  
-
-  setupMPU6050();
+Wire.begin();
+Wire.beginTransmission(MPU_addr);
+Wire.write(0x6B);
+Wire.write(0);
+Wire.endTransmission(true);
 
 
 
@@ -159,12 +173,13 @@ void loop() {
   myButton.tick();
 
   //                  JoyStick Section
+  
   readJoyStick();
   if (previousButtonState != joystickButtonState) { // joystick Button was clicked
      if (joystickButtonState) {
-       HuesON(true);
+       displayTilt(true);
     } else {
-       HuesON(false);
+       displayTilt(false);
     }   
     previousButtonState = joystickButtonState;
   }
@@ -174,14 +189,9 @@ void loop() {
     p_directionXY = directionXY; 
   }
 
-
-  // MPU6050
+  //              ENCODER
   
-//  readMPU6050();
-
   encoderPosition = myEnc.read();
-  // Serial.printf("ecoderPosition = %d\n", encoderPosition);
-  // delay(1000);
   
   if (isOFF) { // if Hues are off don't move the brightness
     myEnc.write(p_encoderPosition);
@@ -213,10 +223,8 @@ void loop() {
 
 
   void turn_OFF_or_ON_Wemo(int wemo) {
-    Serial.printf("Before isWemoOFF[%i] = %d\n",wemo, isWemoOFF[wemo]);
+    
     isWemoOFF[wemo]=!isWemoOFF[wemo];
-    Serial.printf("After isWemoOFF[%i] = %d\n",wemo, isWemoOFF[wemo]);
-
     if ( !isWemoOFF[wemo]) { // if it's on and clicked for OFF
       wemoObj.switchOFF(wemo);
     }
@@ -247,8 +255,8 @@ void  test_display() {
 
 void myDrawText(char *text, int rotation) {
   
-  int size;
-  size = sizeof(text)/sizeof(text[0]);
+  //  int size;
+  //  size = sizeof(text)/sizeof(text[0]);
   // Serial.printf("size=%i string=%s\n",size, text);
   
   display.clearDisplay();
@@ -262,7 +270,7 @@ void myDrawText(char *text, int rotation) {
   display.printf("%s", text);
 
   display.display();
-  delay(2000);
+  delay(100);
 }
 
 void doJoystickActions() {
@@ -308,14 +316,21 @@ void doJoystickActions() {
   }
 }
 
-void HuesON(bool state) {
+void  displayTilt(bool state) {
   Serial.printf(" >>>>>>>>>>>>>>>>>>>>>>>>>    Button state: %d\n      ", joystickButtonState);
-  if (state) { // Turn ON all Hues
-    
+  if (state) { // Display Tilt
+    readMPU6050();
+    display.setTextSize(3);      // Normal 1:1 pixel scale
+    display.setTextColor(SSD1306_WHITE); // Draw white text
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.printf(" Tilt\n%.1f %c\n", y, 0xF8);
+    display.display();   
   }
-  else {       // Turn OFF all Hues
-    
-  }
+  else {       // Hide Tilt
+    display.clearDisplay();
+    display.display();
+    delay(100);  }
 }
 
 // bool p_xMoved = false;
@@ -416,89 +431,48 @@ void readJoyStick() {
 
 }
 
-void setupMPU6050() {
 
-  // acceleration 1g(A single G-force 1g is equivalent to gravitational acceleration 9.8 m/s2)
-  
-  mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-  Serial.printf("Accelerometer range set to: ");
-  switch (mpu.getAccelerometerRange()) {
-  case MPU6050_RANGE_2_G:
-    Serial.printf("+-2G\n");
-    break;
-  case MPU6050_RANGE_4_G:
-    Serial.printf("+-4G\n");
-    break;
-  case MPU6050_RANGE_8_G:
-    Serial.printf("+-8G\n");
-    break;
-  case MPU6050_RANGE_16_G:
-    Serial.printf("+-16G\n");
-    break;
-  }
-  mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-  Serial.printf("Gyro range set to: \n");
-  switch (mpu.getGyroRange()) {
-  case MPU6050_RANGE_250_DEG:
-    Serial.printf("+- 250 deg/s\n");
-    break;
-  case MPU6050_RANGE_500_DEG:
-    Serial.printf("+- 500 deg/s\n");
-    break;
-  case MPU6050_RANGE_1000_DEG:
-    Serial.printf("+- 1000 deg/s\n");
-    break;
-  case MPU6050_RANGE_2000_DEG:
-    Serial.printf("+- 2000 deg/s\n");
-    break;
-  }
 
-  mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-  Serial.printf("Filter bandwidth set to: ");
-  switch (mpu.getFilterBandwidth()) {
-  case MPU6050_BAND_260_HZ:
-    Serial.printf("260 Hz\n");
-    break;
-  case MPU6050_BAND_184_HZ:
-    Serial.printf("184 Hz\n");
-    break;
-  case MPU6050_BAND_94_HZ:
-    Serial.printf("94 Hz\n");
-    break;
-  case MPU6050_BAND_44_HZ:
-    Serial.printf("44 Hz\n");
-    break;
-  case MPU6050_BAND_21_HZ:
-    Serial.printf("21 Hz\n");
-    break;
-  case MPU6050_BAND_10_HZ:
-    Serial.printf("10 Hz\n");
-    break;
-  case MPU6050_BAND_5_HZ:
-    Serial.printf("5 Hz\n");
-    break;
-  }
-
-  Serial.printf("\n");
-  delay(100);
-  
-}
 
 void readMPU6050() {
-  /* Get new sensor events with the readings */
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
+  Wire.beginTransmission(MPU_addr);
+  Wire.write(0x3B);
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU_addr,14,true);
+  AcX=Wire.read()<<8|Wire.read();
+  AcY=Wire.read()<<8|Wire.read();
+  AcZ=Wire.read()<<8|Wire.read();
+  int xAng = map(AcX,minVal,maxVal,-90,90);
+  int yAng = map(AcY,minVal,maxVal,-90,90);
+  int zAng = map(AcZ,minVal,maxVal,-90,90);
+   
+  x= RAD_TO_DEG * (atan2(-yAng, -zAng)+PI);
+  y= RAD_TO_DEG * (atan2(-xAng, -zAng)+PI);
+  z= RAD_TO_DEG * (atan2(-yAng, -xAng)+PI);
+ 
+//Serial.print("AngleX= ");
+//Serial.println(x);
+// Serial.print("AngleY= ");
+  Serial.printf("Tilt %.1f %c\n", y, 0xF8);
 
-  /* Print out the values */
-  Serial.printf("Acceleration X: %.2f, Y: %.2f, Z: %.2f m/s^2\n", a.acceleration.x, a.acceleration.y, a.acceleration.z);
 
-  Serial.printf("Rotation X: %.2f, Y: %.2f, , Z: %.2f rad/s\n", g.gyro.x, g.gyro.y, g.gyro.z );
-
-  Serial.printf("Temperature: %.2f degC\n\n", temp.temperature);
-
-  delay(100);  // Antes 500
+  if (abs(y - p_y)>4) {
+    display.setTextSize(3);      // Normal 1:1 pixel scale
+    display.setTextColor(SSD1306_WHITE); // Draw white text
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.printf(" Tilt\n%.1f %c\n", y, 0xF8);
+    display.display();
+    p_y = y;
+  }
+  
+//Serial.println(y);
+ 
+//Serial.print("AngleZ= ");
+//Serial.println(z);
+//Serial.println("-----------------------------------------");
+delay(400);
 }
-
 
 void printIP() {
   Serial.printf("My IP address: ");
@@ -509,9 +483,7 @@ void printIP() {
 }
 
 void turn_LIGHTS_OFF_or_ON() {
-  Serial.printf("*******    Pressed the buttom before: %d \n", isOFF);
   isOFF = !isOFF;
-  Serial.printf("*******    Pressed: %d  After brightness %i\n", isOFF, brightness);
   if (!isOFF) { // turn lights ON
       for (int j=1; j<=6; j++) {
         setHue(j, true, HueYellow, brightness, 255);         
@@ -523,7 +495,6 @@ void turn_LIGHTS_OFF_or_ON() {
       }
 
   }
-//  Serial.printf("Pressed the buttom after: %d \n", isOFF);
 }
 
 void turn_LIGHTS_OFF() {
