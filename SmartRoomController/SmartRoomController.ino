@@ -39,16 +39,17 @@ bool status;   //user to ensure port openned correctly
 
 // WEMO
 WemoObj wemoObj;
-bool isWemoOFF[2]  = {true, true};
-bool checkTimer[2] = {false, false};
+bool isWemoOFF[5]  = {true, true, true, true, true};
+bool checkTimer[5] = {false, false, false, false, false};
 IoTTimer wemoTimer[2]; // 2 wemo objects to control
+IoTTimer ipTimer;
 
 char message[40];
 
 // ENCODER :    The "c" pin on the encoder is connected to GND
-const int encoderRed = 3;   // OUTPUT from the Teensy
-const int encoderGreen = 4;  // OUTPUT from the Teensy
-const int encoderSW = 5; // SW means the  switch  Note: it is an INPUT to the Teensy
+const int encoderRed   = 3;   // OUTPUT from the Teensy
+const int encoderGreen = 6;  // OUTPUT from the Teensy
+const int encoderSW    = 5; // SW means the  switch  Note: it is an INPUT to the Teensy
 
 // BUZZER
 const int BUZZER = 21; // A7
@@ -75,13 +76,14 @@ const int BUTTONPIN = 23;
 // ???
 int  totalColors = sizeof(HueRainbow)/sizeof(HueRainbow[0]);
 bool isOFF = true;
+bool isOnline = false;
 const int LIGHT = 2;
 const int activeLOW = true;
 const int pullUP = true;
+OneButton myButton(BUTTONPIN , activeLOW , pullUP);
 
 // Encoder
 Encoder myEnc(1,2);
-OneButton myButton(BUTTONPIN , activeLOW , pullUP);
 int encoderPosition = 150;
 int brightness = 200; // Starting brightness
 int p_encoderPosition = brightness;
@@ -134,27 +136,23 @@ void setup()
   pinMode(4, OUTPUT);
   digitalWrite(4, HIGH);
   Ethernet.begin(mac);
-  delay(200);          //ensure Serial Monitor is up and running           
-  printIP();
-  // Serial.printf("LinkStatus: %i  \n",Ethernet.linkStatus());
+  readIP();         
+  ipTimer.startTimer(5000); // Automatic checking Ethernet port status
 
   // MPU6050
 
-
-Wire.begin();
-Wire.beginTransmission(MPU_addr);
-Wire.write(0x6B);
-Wire.write(0);
-Wire.endTransmission(true);
-
-
+  Wire.begin();
+  Wire.beginTransmission(MPU_addr);
+  Wire.write(0x6B);
+  Wire.write(0);
+  Wire.endTransmission(true);
 
   // Encoder
   pinMode(encoderRed, OUTPUT);      // OUTPUT from the Teensy
   pinMode(encoderGreen, OUTPUT);    // OUTPUT from the Teensy
   pinMode(encoderSW, INPUT_PULLUP); // SW means the  switch  Note: it is an INPUT to the Teensy
 
-  digitalWrite(encoderRed, HIGH);
+  //  digitalWrite(encoderRed, HIGH);
   myEnc.write(encoderPosition);   // First Time set to default initialization value
   p_encoderPosition = encoderPosition;
   // Serial.printf("Initial Econder position =  %d\n\n", encoderPosition);
@@ -219,13 +217,20 @@ void loop() {
       }
     
   }
+
+  // Automatic Ethernet address check every 5 seconds
+  if (ipTimer.isTimerReady()) {
+       Ethernet.begin(mac);
+       readIP();
+       ipTimer.startTimer(5000);
+  }
 }
 
 
   void turn_OFF_or_ON_Wemo(int wemo) {
     
     isWemoOFF[wemo]=!isWemoOFF[wemo];
-    if ( !isWemoOFF[wemo]) { // if it's on and clicked for OFF
+    if ( isWemoOFF[wemo]) { // if it's on and clicked for OFF
       wemoObj.switchOFF(wemo);
     }
     else { // turn on the wemo switch if switch was off
@@ -277,8 +282,17 @@ void doJoystickActions() {
   
   
   switch (directionXY) {
-    case Still:
+    case Still:   // Display status
+           display.clearDisplay();
+           display.setTextSize(1);      // Normal 1:1 pixel scale
+           display.setTextColor(SSD1306_WHITE); // Draw white text
+           display.setCursor(0, 0);     // Start at top-left corner
+           display.printf("U  D  L  R  LU LD RU RD\n");
+           for (int wemoNum = 0; wemoNum<5; wemoNum++) {
+              display.printf("%2s ",isWemoOFF[wemoNum]?"-  ":"ON ");
+           }
 
+           display.display();
     break;
     case Up:
   Serial.printf(" *************************   UP Direction: %d\n      ", directionXY);      
@@ -291,18 +305,22 @@ void doJoystickActions() {
     break;
     case Left:
   Serial.printf(" *************************   LEFT Direction: %d\n      ", directionXY);
+      turn_OFF_or_ON_Wemo(2);
 
     break;
     case Right:
   Serial.printf(" *************************   RIGHT Direction: %d\n      ", directionXY);
+      turn_OFF_or_ON_Wemo(3);
 
     break;
     case Left_Up:
   Serial.printf(" *************************   LEFT UP Direction: %d\n      ", directionXY);
+      turn_OFF_or_ON_Wemo(4);
 
     break;
     case Left_Down:
   Serial.printf(" *************************   LEFT DOWN Direction: %d\n      ", directionXY);
+      turn_OFF_or_ON_Wemo(5);
 
     break;
     case Right_Up:
@@ -410,9 +428,6 @@ void readJoyStick() {
    
   }
 
-  
-  
-
   buttonValue = digitalRead(JOYSTICK);        // read Button state [0,1]
 //  Serial.printf(" | Button: %i\n", buttonValue);
   if (!joystickClicked) {
@@ -474,12 +489,36 @@ void readMPU6050() {
 delay(400);
 }
 
-void printIP() {
-  Serial.printf("My IP address: ");
-  for (byte thisByte = 0; thisByte < 3; thisByte++) {
-    Serial.printf("%i.",Ethernet.localIP()[thisByte]);
-  }
-  Serial.printf("%i\n",Ethernet.localIP()[3]);
+void readIP() {
+  if (Ethernet.localIP()[3]==0 && Ethernet.localIP()[3]==0 &&
+      Ethernet.localIP()[3]==0 && Ethernet.localIP()[3]==0) {
+       Serial.printf("ERROR:  NO IP ADDRESS SET");
+       isOnline = false;
+       digitalWrite(encoderRed, HIGH);
+       digitalWrite(encoderGreen, LOW);
+//       for (int s = 0; s<10; s++) {
+//         digitalWrite(BUZZER, LOW);
+//         delay(500);
+//         digitalWrite(BUZZER, LOW);
+//         delay(100);
+//       }
+   } 
+   else 
+   {
+      isOnline = true;
+      digitalWrite(encoderRed, LOW);
+      digitalWrite(encoderGreen, HIGH);
+      Serial.printf("MY IP address: ");
+      for (byte thisByte = 0; thisByte <= 3; thisByte++) {
+        Serial.printf("%i.",Ethernet.localIP()[thisByte]);
+      }    
+      Serial.printf("\n");
+      //digitalWrite(encoderRed, LOW);
+      //digitalWrite(encoderGreen, HIGH);
+      delay(10);
+   }
+
+//  Serial.printf("%i\n",Ethernet.localIP()[3]);
 }
 
 void turn_LIGHTS_OFF_or_ON() {
