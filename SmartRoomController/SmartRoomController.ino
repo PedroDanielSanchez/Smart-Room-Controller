@@ -74,7 +74,7 @@ int p_directionXY = directionXY;
 const int BUTTONPIN = 23;
 
 // ???
-int  totalColors = sizeof(HueRainbow)/sizeof(HueRainbow[0]);
+int  currentColor = HueYellow;
 bool isOFF = true;
 bool isOnline = false;
 const int LIGHT = 2;
@@ -100,46 +100,38 @@ double p_y=0.0;
 void setup()
 {
 
-  //                      OLED  DISPLAY
+  //                 OLED  DISPLAY
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
     Serial.println(F("SSD1306 allocation failed"));
     for(;;); // Don't proceed, loop forever
   }  
+  display.clearDisplay();display.display();  
   display.display(); // Display initial logo
   delay(500);       // Pause for 500 milliseconds
   
   display.cp437(true);         // Use full 256 char 'Code Page 437' font
 
-  test_display();
+  welcome_display();
 
-  // Buzzer
+  //             Buzzer
   pinMode(BUZZER, OUTPUT);
   digitalWrite(BUZZER, LOW);
   digitalWrite(BUZZER, HIGH);
-  delay(10);
+  delay(500);
   digitalWrite(BUZZER, LOW);
 
-  // JoyStick
+  //            JoyStick
   
   pinMode(JOYSTICK, INPUT_PULLUP);
 
   Serial.begin(115200);
   while (!Serial);
+  Serial.printf("\n\n\n\n\n\nStarted SMART ROOM CONTROLLER V1 by Pedro Daniel Sanchez  \n");
 
-  Serial.printf("\n\n\n\n\n\nStarted SMART ROOM CONTROLLER V1 by Pedro Daniel Sanchez  \n", totalColors);
 
 
-  // Ethernet
-  pinMode(10, OUTPUT);
-  digitalWrite(10, HIGH);
-  pinMode(4, OUTPUT);
-  digitalWrite(4, HIGH);
-  Ethernet.begin(mac);
-  readIP();         
-  ipTimer.startTimer(5000); // Automatic checking Ethernet port status
-
-  // MPU6050
+  //            MPU6050
 
   Wire.begin();
   Wire.beginTransmission(MPU_addr);
@@ -147,21 +139,34 @@ void setup()
   Wire.write(0);
   Wire.endTransmission(true);
 
-  // Encoder
+  //           Encoder
   pinMode(encoderRed, OUTPUT);      // OUTPUT from the Teensy
   pinMode(encoderGreen, OUTPUT);    // OUTPUT from the Teensy
   pinMode(encoderSW, INPUT_PULLUP); // SW means the  switch  Note: it is an INPUT to the Teensy
 
-  //  digitalWrite(encoderRed, HIGH);
   myEnc.write(encoderPosition);   // First Time set to default initialization value
   p_encoderPosition = encoderPosition;
-  // Serial.printf("Initial Econder position =  %d\n\n", encoderPosition);
 
   // Button
   turn_LIGHTS_OFF();
   myButton.attachClick(turn_LIGHTS_OFF_or_ON);
   myButton.attachDoubleClick(turn_LIGHTS_OFF);
   myButton.setClickTicks(250); 
+
+  //      Ethernet
+  pinMode(10, OUTPUT);
+  digitalWrite(10, HIGH);
+  pinMode(4, OUTPUT);
+  digitalWrite(4, HIGH);
+
+  digitalWrite(encoderRed, HIGH); 
+
+  Serial.printf("\n #### 1\n");
+  Ethernet.begin(mac);  
+  Serial.printf(" #### 2\n");
+  readIP();         
+  Serial.printf(" #### 3\n");
+  ipTimer.startTimer(5000); // Automatic checking Ethernet port status
 
   Serial.printf(" #########  End of Setup\n\n\n      ");
 
@@ -213,12 +218,13 @@ void loop() {
     brightness = encoderPosition;
     p_encoderPosition = encoderPosition;
       for (int j=1; j<=6; j++) {
-        setHue(j, true, HueYellow, brightness, 255);         
+        setHue(j, true, currentColor, brightness, 255);         
       }
     
   }
 
-  // Automatic Ethernet address check every 5 seconds
+  // Automatically check ETHERNET connection to router every 5 seconds
+  
   if (ipTimer.isTimerReady()) {
        Ethernet.begin(mac);
        readIP();
@@ -239,34 +245,39 @@ void loop() {
   }
 
 
-void  test_display() {
-  sprintf(message, "%s","Hello World\n");
-  myDrawText(message,0);
+void  welcome_display() {
+  // textSize 1 = 28 chars/line
+  // textSize 2 = 10 chars/line
+  sprintf(message, "%s","\n  Smart\n   Room\nController\n");
+  myDrawText(message,0,2,false);
+//  sprintf(message, "%s","\n12345678901234567890\n");
+//  myDrawText(message,0,2, false);
 
-  sprintf(message, "Se%cor %s \n%s", 0xA4,"Pedro Sanchez", "11/27" );
-  myDrawText(message,0);
+//  sprintf(message, "Se%cor %s \n%s", 0xA4,"Pedro Sanchez", "11/27" );
+//  myDrawText(message,0,1, false);
   
-  sprintf(message, "    SE%cOR\n\n %s", 165,"   JESUS\n\n mi  DIOS\n\n" );
-  myDrawText(message,0);
+  //sprintf(message, "    SE%cOR\n\n %s", 165,"   JESUS\n\n mi  DIOS\n\n" );
+ // myDrawText(message,0,1);
 //  sprintf(message, "    SE%cOR\n\n %s", 165,"   JESUS\n\n mi  DIOS\n\n" );
-//  myDrawText(message,3);
+//  myDrawText(message,3,1);
 //  sprintf(message, "    SE%cOR\n\n %s", 165,"   JESUS\n\n mi  DIOS\n\n" );
-//  myDrawText(message,1);  
+//  myDrawText(message,1,1);  
 //  sprintf(message, "    SE%cOR\n\n %s", 165,"   JESUS\n\n mi  DIOS\n\n" );
-//  myDrawText(message,2);
+//  myDrawText(message,2,1);
 //  sprintf(message, "    SE%cOR\n\n %s", 165,"   JESUS\n\n mi  DIOS\n\n" );
-//  myDrawText(message,1);    
+//  myDrawText(message,1,1);    
 }
 
-void myDrawText(char *text, int rotation) {
+void myDrawText(char *text, int rotation, int size, bool clearScreen) {
   
-  //  int size;
   //  size = sizeof(text)/sizeof(text[0]);
   // Serial.printf("size=%i string=%s\n",size, text);
   
-  display.clearDisplay();
+  if (clearScreen) {
+    display.clearDisplay();
+  }
 
-  display.setTextSize(1);      // Normal 1:1 pixel scale
+  display.setTextSize(size);      
   display.setTextColor(SSD1306_WHITE); // Draw white text
   
   display.setRotation(rotation);
@@ -275,7 +286,7 @@ void myDrawText(char *text, int rotation) {
   display.printf("%s", text);
 
   display.display();
-  delay(100);
+  delay(10000);
 }
 
 void doJoystickActions() {
@@ -295,41 +306,42 @@ void doJoystickActions() {
            display.display();
     break;
     case Up:
-  Serial.printf(" *************************   UP Direction: %d\n      ", directionXY);      
+      Serial.printf(" *************************   UP Direction: %d\n      ", directionXY);      
       turn_OFF_or_ON_Wemo(0);
    break;
     case Down:
-  Serial.printf(" *************************   DOWN Direction: %d\n      ", directionXY);
+      Serial.printf(" *************************   DOWN Direction: %d\n      ", directionXY);
       turn_OFF_or_ON_Wemo(1);
 
     break;
     case Left:
-  Serial.printf(" *************************   LEFT Direction: %d\n      ", directionXY);
+      Serial.printf(" *************************   LEFT Direction: %d\n      ", directionXY);
       turn_OFF_or_ON_Wemo(2);
 
     break;
     case Right:
-  Serial.printf(" *************************   RIGHT Direction: %d\n      ", directionXY);
+      Serial.printf(" *************************   RIGHT Direction: %d\n      ", directionXY);
       turn_OFF_or_ON_Wemo(3);
 
     break;
     case Left_Up:
-  Serial.printf(" *************************   LEFT UP Direction: %d\n      ", directionXY);
+      Serial.printf(" *************************   LEFT UP Direction: %d\n      ", directionXY);
       turn_OFF_or_ON_Wemo(4);
 
     break;
     case Left_Down:
-  Serial.printf(" *************************   LEFT DOWN Direction: %d\n      ", directionXY);
-      turn_OFF_or_ON_Wemo(5);
+      Serial.printf(" *************************   LEFT DOWN Direction: %d\n      ", directionXY);
+      currentColor=HueYellow;
 
     break;
     case Right_Up:
-  Serial.printf(" *************************   RIGHT UP Direction: %d\n      ", directionXY);
-
+      Serial.printf(" *************************   RIGHT UP Direction: %d\n      ", directionXY);
+      currentColor=HueBlue;
+             
     break;
     case Right_Down:
-  Serial.printf(" *************************   RIGHT DOWN Direction: %d\n      ", directionXY);
-
+      Serial.printf(" *************************   RIGHT DOWN Direction: %d\n      ", directionXY);
+      currentColor=HueGreen;
     break;
   }
 }
@@ -449,7 +461,7 @@ void readJoyStick() {
 
 
 
-void readMPU6050() {
+void readMPU6050() { // using y on device for tilt measure
   Wire.beginTransmission(MPU_addr);
   Wire.write(0x3B);
   Wire.endTransmission(false);
@@ -465,9 +477,6 @@ void readMPU6050() {
   y= RAD_TO_DEG * (atan2(-xAng, -zAng)+PI);
   z= RAD_TO_DEG * (atan2(-yAng, -xAng)+PI);
  
-//Serial.print("AngleX= ");
-//Serial.println(x);
-// Serial.print("AngleY= ");
   Serial.printf("Tilt %.1f %c\n", y, 0xF8);
 
 
@@ -480,31 +489,27 @@ void readMPU6050() {
     display.display();
     p_y = y;
   }
-  
-//Serial.println(y);
- 
-//Serial.print("AngleZ= ");
-//Serial.println(z);
-//Serial.println("-----------------------------------------");
 delay(400);
 }
 
 void readIP() {
-  if (Ethernet.localIP()[3]==0 && Ethernet.localIP()[3]==0 &&
-      Ethernet.localIP()[3]==0 && Ethernet.localIP()[3]==0) {
-       Serial.printf("ERROR:  NO IP ADDRESS SET");
+  if (Ethernet.localIP()[0]==0 && Ethernet.localIP()[1]==0 &&
+      Ethernet.localIP()[2]==0 && Ethernet.localIP()[3]==0) {
+       Serial.printf("ERROR:  NO IP ADDRESS SET\n");
+
+       sprintf(message, "%s","\n    NO\n INTERNET\n");
+       myDrawText(message,0,2,true);
+       
        isOnline = false;
        digitalWrite(encoderRed, HIGH);
        digitalWrite(encoderGreen, LOW);
-//       for (int s = 0; s<10; s++) {
-//         digitalWrite(BUZZER, LOW);
-//         delay(500);
-//         digitalWrite(BUZZER, LOW);
-//         delay(100);
-//       }
    } 
    else 
    {
+      if (!isOnline) {
+        sprintf(message, "%s","\n  READY !\n");
+        myDrawText(message,0,2,true);
+      }
       isOnline = true;
       digitalWrite(encoderRed, LOW);
       digitalWrite(encoderGreen, HIGH);
@@ -525,7 +530,7 @@ void turn_LIGHTS_OFF_or_ON() {
   isOFF = !isOFF;
   if (!isOFF) { // turn lights ON
       for (int j=1; j<=6; j++) {
-        setHue(j, true, HueYellow, brightness, 255);         
+        setHue(j, true, currentColor, brightness, 255);         
       }
   }
   else { // turn lights off
