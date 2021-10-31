@@ -73,7 +73,8 @@ int p_directionXY = directionXY;
 // Button
 const int BUTTONPIN = 23;
 
-// ???
+
+//const char colorName[3][6] = {"yellow", "blue", "green"};
 int  currentColor = HueYellow;
 bool isOFF = true;
 bool isOnline = false;
@@ -302,45 +303,56 @@ void doJoystickActions() {
            for (int wemoNum = 0; wemoNum<5; wemoNum++) {
               display.printf("%2s ",isWemoOFF[wemoNum]?"-  ":"ON ");
            }
+           display.setTextSize(2);      // Normal 1:1 pixel scale
+           if (currentColor==HueYellow) {
+              display.printf("\n\nYELLOW ");
+           } 
+           else if (currentColor==HueBlue) {
+              display.printf("\n\n  BLUE");
+           }
+           else {
+              display.printf("\n\nGREEN");
+           }
+           
 
            display.display();
     break;
     case Up:
-      Serial.printf(" *************************   UP Direction: %d\n      ", directionXY);      
+      Serial.printf(" ^   UP Direction: %d\n      ", directionXY);      
       turn_OFF_or_ON_Wemo(0);
    break;
     case Down:
-      Serial.printf(" *************************   DOWN Direction: %d\n      ", directionXY);
+      Serial.printf(" V   DOWN Direction: %d\n      ", directionXY);
       turn_OFF_or_ON_Wemo(1);
 
     break;
     case Left:
-      Serial.printf(" *************************   LEFT Direction: %d\n      ", directionXY);
+      Serial.printf(" <   LEFT Direction: %d\n      ", directionXY);
       turn_OFF_or_ON_Wemo(2);
 
     break;
     case Right:
-      Serial.printf(" *************************   RIGHT Direction: %d\n      ", directionXY);
+      Serial.printf(" >   RIGHT Direction: %d\n      ", directionXY);
       turn_OFF_or_ON_Wemo(3);
 
     break;
     case Left_Up:
-      Serial.printf(" *************************   LEFT UP Direction: %d\n      ", directionXY);
+      Serial.printf(" < ^  LEFT UP Direction: %d\n      ", directionXY);
       turn_OFF_or_ON_Wemo(4);
 
     break;
     case Left_Down:
-      Serial.printf(" *************************   LEFT DOWN Direction: %d\n      ", directionXY);
+      Serial.printf(" < v LEFT DOWN Direction: %d\n      ", directionXY);
       currentColor=HueYellow;
 
     break;
     case Right_Up:
-      Serial.printf(" *************************   RIGHT UP Direction: %d\n      ", directionXY);
+      Serial.printf(" > ^ RIGHT UP Direction: %d\n      ", directionXY);
       currentColor=HueBlue;
              
     break;
     case Right_Down:
-      Serial.printf(" *************************   RIGHT DOWN Direction: %d\n      ", directionXY);
+      Serial.printf(" > V RIGHT DOWN Direction: %d\n      ", directionXY);
       currentColor=HueGreen;
     break;
   }
@@ -356,15 +368,20 @@ void  displayTilt(bool state) {
     display.setCursor(0, 0);
     display.printf(" Tilt\n%.1f %c\n", y, 0xF8);
     display.display();   
+    //state=false;
+
   }
   else {       // Hide Tilt
     display.clearDisplay();
     display.display();
-    delay(100);  }
+    delay(100); 
+    //delay(2000);
+    directionXY = Still;  // Show status
+    doJoystickActions(); 
+
+  }
 }
 
-// bool p_xMoved = false;
-// bool p_yMoved = false;
 
 void readJoyStick() {
 
@@ -374,13 +391,8 @@ void readJoyStick() {
   
   
   x = analogRead(JOYSTICK_RX);       // read X axis value [0..1023]
- // Serial.printf("X: %04i", x);
 
   y = analogRead(JOYSTICK_RY);       // read Y axis value [0..1023]
-//  Serial.printf(" | Y: %04i", y);
-
-//int  previousX = 730;
-//int  previousY = 750;
 
   if (abs(x-previousX)>25) { // x moved
     xMoved = true;
@@ -437,11 +449,9 @@ void readJoyStick() {
     else { // No movement
       directionXY = Still;
     }
-   
   }
 
   buttonValue = digitalRead(JOYSTICK);        // read Button state [0,1]
-//  Serial.printf(" | Button: %i\n", buttonValue);
   if (!joystickClicked) {
     if (buttonValue == 0) { // button was clicked
       joystickClicked = true;
@@ -457,8 +467,6 @@ void readJoyStick() {
   delay(100);
 
 }
-
-
 
 
 void readMPU6050() { // using y on device for tilt measure
@@ -522,8 +530,6 @@ void readIP() {
       //digitalWrite(encoderGreen, HIGH);
       delay(10);
    }
-
-//  Serial.printf("%i\n",Ethernet.localIP()[3]);
 }
 
 void turn_LIGHTS_OFF_or_ON() {
@@ -551,14 +557,4 @@ void turn_LIGHTS_OFF() {
   isOFF=true;
   Serial.printf("======== 2   turn_lights_OFF: isOFF = %d  brightness %i\n", isOFF, brightness);
 
-
-}
-
-
-void flat() {
-  
-}
-
-void tilted() {
-  
 }
